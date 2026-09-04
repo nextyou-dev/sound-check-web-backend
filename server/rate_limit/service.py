@@ -71,8 +71,10 @@ def get_quota(email: str) -> dict:
     if doc is None:
         # User has never made a request — full quota, no active window
         return {
-            "remaining":       MAX_TRIES,
             "max":             MAX_TRIES,
+            "used":            0,
+            "remaining":       MAX_TRIES,
+            "window_hours":    RATE_LIMIT_WINDOW_H,
             "hours_remaining": 0.0,
         }
 
@@ -81,18 +83,19 @@ def get_quota(email: str) -> dict:
 
     expires_at = doc.get("expires_at")
     if expires_at:
-        now   = datetime.now(timezone.utc)
-        # expires_at from Mongo may be naive — make it aware if needed
+        now = datetime.now(timezone.utc)
+        # expires_at from Mongo may be naive — make it timezone-aware if needed
         if expires_at.tzinfo is None:
-            from datetime import timezone as _tz
-            expires_at = expires_at.replace(tzinfo=_tz.utc)
-        delta_secs    = (expires_at - now).total_seconds()
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        delta_secs      = (expires_at - now).total_seconds()
         hours_remaining = round(max(0.0, delta_secs / 3600), 2)
     else:
         hours_remaining = 0.0
 
     return {
-        "remaining":       remaining,
         "max":             MAX_TRIES,
+        "used":            used,
+        "remaining":       remaining,
+        "window_hours":    RATE_LIMIT_WINDOW_H,
         "hours_remaining": hours_remaining,
     }
