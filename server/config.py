@@ -38,6 +38,10 @@ MAX_TRIES: int = RATE_LIMIT_MAX
 _exempt_raw = os.getenv("EXEMPT_EMAILS", "")
 EXEMPT_EMAILS = set(e.strip().lower() for e in _exempt_raw.split(",") if e.strip())
 
+# EXEMPT_DOMAINS — comma-separated list of email domains (e.g., nextyou.app) that bypass rate limits
+_exempt_domains_raw = os.getenv("EXEMPT_DOMAINS", "")
+EXEMPT_DOMAINS = set(d.strip().lower() for d in _exempt_domains_raw.split(",") if d.strip())
+
 # ─── ML / VAD ────────────────────────────────────────────────────────────────
 GUEST_VAD_THRESHOLD: float = float(os.getenv("GUEST_VAD_THRESHOLD", "0.50"))
 

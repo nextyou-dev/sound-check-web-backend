@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 
-from config import MAX_TRIES, RATE_LIMIT_WINDOW_H, EXEMPT_EMAILS, log
+from config import MAX_TRIES, RATE_LIMIT_WINDOW_H, EXEMPT_EMAILS, EXEMPT_DOMAINS, log
 from rate_limit.repository import get_count, get_quota_doc, increment
 
 
@@ -23,6 +23,18 @@ def _ip_key(ip: str) -> str:
     return f"ip:{ip}"
 
 
+def _is_exempt(email: str) -> bool:
+    email_lower = email.lower()
+    if email_lower in EXEMPT_EMAILS:
+        return True
+    
+    parts = email_lower.split("@")
+    if len(parts) == 2 and parts[1] in EXEMPT_DOMAINS:
+        return True
+        
+    return False
+
+
 def enforce(email: str, ip: str) -> None:
     """
     Check the email key against MAX_TRIES.
@@ -31,7 +43,7 @@ def enforce(email: str, ip: str) -> None:
     IP rate limiting is commented out but can be re-enabled by
     uncommenting the _ip_key check below.
     """
-    if email.lower() in EXEMPT_EMAILS:
+    if _is_exempt(email):
         log.info(f"[rate_limit] Bypassing rate limit for exempt email: {email}")
         return
 
@@ -56,7 +68,7 @@ def record_usage(email: str, ip: str) -> None:
     Increment the email counter after a successful analysis.
     Should be called as a fire-and-forget background task.
     """
-    if email.lower() in EXEMPT_EMAILS:
+    if _is_exempt(email):
         return
         
     increment(_email_key(email))
@@ -73,7 +85,7 @@ def get_quota(email: str) -> dict:
       max:             int   — MAX_TRIES
       hours_remaining: float — hours until the window resets (0.0 if no usage yet)
     """
-    if email.lower() in EXEMPT_EMAILS:
+    if _is_exempt(email):
         return {
             "max":             9999,
             "used":            0,

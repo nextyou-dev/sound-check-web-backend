@@ -261,6 +261,7 @@ Marks the analysis result as downloaded by the user.
 - The window resets automatically via a MongoDB TTL index — no cron job required.
 - Use `GET /analysis/quota` before submitting audio to check remaining uses.
 - Emails listed in the `EXEMPT_EMAILS` env var bypass this limit entirely.
+- Email domains listed in the `EXEMPT_DOMAINS` env var (e.g., `nextyou.app`) also bypass this limit entirely.
 
 **Rate limit exceeded response `429`:**
 ```json
