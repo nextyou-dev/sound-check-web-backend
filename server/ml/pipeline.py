@@ -30,7 +30,7 @@ class VoiceAnalyzer:
         (Guest version: baseline and history omitted for simplicity)
         """
         features = self._extract_acoustic_features(chunk_wav_path)
-        emotion, _ = self._run_sense_voice(chunk_array)
+        emotion, transcript = self._run_sense_voice(chunk_array)
         valence, arousal, _, _ = self._run_valence_arousal_from_array(chunk_array)
         
         stress_score, _ = self._calculate_stress_score(
@@ -62,7 +62,8 @@ class VoiceAnalyzer:
             "pitch_semitones": pitch_semitones,
             "loudness": loudness,
             "raw_valence": valence,
-            "raw_arousal": arousal
+            "raw_arousal": arousal,
+            "transcript": transcript
         }
 
     def _extract_acoustic_features(self, path: str) -> dict:

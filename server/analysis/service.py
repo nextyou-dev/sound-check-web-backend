@@ -43,7 +43,27 @@ def _get_category(val: float, feat_name: str, baseline: dict, raw_val=None) -> s
     return "High" if z >= 0 else "Low"
 
 
+
+def scan_safety(transcript: str, engine) -> tuple[bool, str | None, str | None]:
+    if not transcript or not transcript.strip():
+        return False, None, None
+    if not engine.distilbart_pipeline:
+        return False, None, None
+    
+    candidate_labels = ["suicide or self harm", "violence", "safe", "normal statement"]
+    result = engine.distilbart_pipeline(
+        transcript.strip(), 
+        candidate_labels=candidate_labels, 
+        multi_label=True
+    )
+    for label, score in zip(result['labels'], result['scores']):
+        if label in ["suicide or self harm", "violence"] and score >= 0.75:
+            category = "self_harm" if label == "suicide or self harm" else "harm_others"
+            return True, f"{label} ({score*100:.1f}%)", category
+    return False, None, None
+
 class AnalysisError(Exception):
+
     """Raised on unrecoverable ML pipeline failures."""
 
 
@@ -188,6 +208,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
             "composure_label":       comp_label,
             "sleep_3d_avg":          sleep_3d_avg if sleep_3d_avg > 0 else None,
             "sleep_debt_hrs":        sleep_debt_hrs,
+            "summary":               summary_text,
         }
 
         compute_ms = round((time.perf_counter() - comp_start) * 1000)
