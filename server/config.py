@@ -30,6 +30,11 @@ EMAIL_FROM: str     = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
 RATE_LIMIT_MAX: int      = int(os.getenv("RATE_LIMIT_MAX", "3"))
 RATE_LIMIT_WINDOW_H: int = int(os.getenv("RATE_LIMIT_WINDOW_H", "48"))
 
+# MAX_TRIES — the number of voice analyses a user may run per 48-hour window.
+# Takes precedence over RATE_LIMIT_MAX for clarity; falls back to RATE_LIMIT_MAX
+# so existing deployments are not broken.
+MAX_TRIES: int = int(os.getenv("MAX_TRIES", os.getenv("RATE_LIMIT_MAX", "3")))
+
 # ─── ML / VAD ────────────────────────────────────────────────────────────────
 GUEST_VAD_THRESHOLD: float = float(os.getenv("GUEST_VAD_THRESHOLD", "0.50"))
 

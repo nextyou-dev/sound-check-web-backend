@@ -7,15 +7,26 @@ has made inside the current 48-hour window.  A MongoDB TTL index on the
 """
 from datetime import datetime, timedelta, timezone
 
-from db.mongo import get_db
 from pymongo import ReturnDocument
+
+from db.mongo import get_db
 from config import RATE_LIMIT_WINDOW_H
 
 
 def get_count(key: str) -> int:
-    """Return the current request count for this key (0 if no record)."""
+    """Return the current request count for this key (0 if no record exists)."""
     doc = get_db()["rate_limits"].find_one({"key": key}, {"count": 1})
     return doc["count"] if doc else 0
+
+
+def get_quota_doc(key: str) -> dict | None:
+    """
+    Return the full rate-limit document for `key`, or None if the window
+    hasn't started yet (i.e. user has never made a request).
+    """
+    return get_db()["rate_limits"].find_one(
+        {"key": key}, {"count": 1, "expires_at": 1}
+    )
 
 
 def increment(key: str) -> int:

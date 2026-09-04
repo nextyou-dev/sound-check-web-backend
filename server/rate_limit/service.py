@@ -1,16 +1,18 @@
 """
-rate_limit/service.py — Business logic for per-user / per-IP rate limiting.
+rate_limit/service.py — Business logic for per-user rate limiting.
 
 Policy:
-  - 3 voice analyses per unique email per 48-hour rolling window.
-  - 3 voice analyses per unique IP per 48-hour rolling window.
-  - Both guards must pass before the analysis is run.
+  - N voice analyses per unique email per 48-hour rolling window.
+    N is controlled by the MAX_TRIES environment variable.
+  - IP rate limiting is currently disabled (commented out).
   - Counters are incremented AFTER a successful response is committed (fire-and-forget).
 """
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 
-from config import RATE_LIMIT_MAX, log
-from rate_limit.repository import get_count, increment
+from config import MAX_TRIES, RATE_LIMIT_WINDOW_H, log
+from rate_limit.repository import get_count, get_quota_doc, increment
 
 
 def _email_key(email: str) -> str:
@@ -23,29 +25,74 @@ def _ip_key(ip: str) -> str:
 
 def enforce(email: str, ip: str) -> None:
     """
-    Check both keys against RATE_LIMIT_MAX.
-    Raises HTTP 429 if either limit is exceeded.
+    Check the email key against MAX_TRIES.
+    Raises HTTP 429 if the per-account limit is exceeded.
+
+    IP rate limiting is commented out but can be re-enabled by
+    uncommenting the _ip_key check below.
     """
     # Commented out IP rate limiting as requested by user
     # for key, label in ((_email_key(email), "email"), (_ip_key(ip), "IP")):
     for key, label in ((_email_key(email), "email"),):
         count = get_count(key)
-        if count >= RATE_LIMIT_MAX:
+        if count >= MAX_TRIES:
             log.warning(f"[rate_limit] {label} limit hit for {key} (count={count})")
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=(
-                    f"You have reached the limit of {RATE_LIMIT_MAX} voice analyses "
-                    f"per 48 hours for this {label}. Please try again later."
+                    f"RATE_LIMIT_EXCEEDED|You have reached the limit of {MAX_TRIES} "
+                    f"voice analyses per {RATE_LIMIT_WINDOW_H} hours. "
+                    f"Please try again later."
                 ),
             )
 
 
 def record_usage(email: str, ip: str) -> None:
     """
-    Increment both counters after a successful analysis.
+    Increment the email counter after a successful analysis.
     Should be called as a fire-and-forget background task.
     """
     increment(_email_key(email))
     # increment(_ip_key(ip))  # Commented out IP rate limiting
-    log.info(f"[rate_limit] Usage recorded — email={email}, ip={ip} (IP tracking disabled)")
+    log.info(f"[rate_limit] Usage recorded — email={email} (IP tracking disabled)")
+
+
+def get_quota(email: str) -> dict:
+    """
+    Return remaining quota info for the given email.
+
+    Response shape:
+      remaining:       int   — how many analyses left in this window
+      max:             int   — MAX_TRIES
+      hours_remaining: float — hours until the window resets (0.0 if no usage yet)
+    """
+    doc = get_quota_doc(_email_key(email))
+
+    if doc is None:
+        # User has never made a request — full quota, no active window
+        return {
+            "remaining":       MAX_TRIES,
+            "max":             MAX_TRIES,
+            "hours_remaining": 0.0,
+        }
+
+    used      = doc.get("count", 0)
+    remaining = max(0, MAX_TRIES - used)
+
+    expires_at = doc.get("expires_at")
+    if expires_at:
+        now   = datetime.now(timezone.utc)
+        # expires_at from Mongo may be naive — make it aware if needed
+        if expires_at.tzinfo is None:
+            from datetime import timezone as _tz
+            expires_at = expires_at.replace(tzinfo=_tz.utc)
+        delta_secs    = (expires_at - now).total_seconds()
+        hours_remaining = round(max(0.0, delta_secs / 3600), 2)
+    else:
+        hours_remaining = 0.0
+
+    return {
+        "remaining":       remaining,
+        "max":             MAX_TRIES,
+        "hours_remaining": hours_remaining,
+    }
