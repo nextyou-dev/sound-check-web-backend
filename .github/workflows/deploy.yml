@@ -1,4 +1,4 @@
-name: Deploy Backend
+name: Deploy Backend to GCP
 
 on:
   push:
@@ -9,12 +9,28 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Deployment Script on VM
+      - name: Deploy to GCP VM
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
           script: |
+            echo "🚀 Backend Deployment Started..."
             cd /home/nextyou/sound-check-web-backend
-            ./deploy.sh
+            
+            echo "📥 Fetching latest code from GitHub..."
+            git fetch --all
+            git reset --hard origin/main
+            
+            echo "📦 Building new Docker Image with Gunicorn & ML Models..."
+            docker compose build
+            
+            echo "🔄 Swapping Containers..."
+            docker compose down
+            docker compose up -d
+            
+            echo "🧹 Cleaning up old unused Docker images..."
+            docker image prune -f
+            
+            echo "✅ Backend Deployment Successful!"
