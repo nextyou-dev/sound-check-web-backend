@@ -43,7 +43,27 @@ def _get_category(val: float, feat_name: str, baseline: dict, raw_val=None) -> s
     return "High" if z >= 0 else "Low"
 
 
+
+def scan_safety(transcript: str, engine) -> tuple[bool, str | None, str | None]:
+    if not transcript or not transcript.strip():
+        return False, None, None
+    if not engine.distilbart_pipeline:
+        return False, None, None
+    
+    candidate_labels = ["suicide or self harm", "violence", "safe", "normal statement"]
+    result = engine.distilbart_pipeline(
+        transcript.strip(), 
+        candidate_labels=candidate_labels, 
+        multi_label=True
+    )
+    for label, score in zip(result['labels'], result['scores']):
+        if label in ["suicide or self harm", "violence"] and score >= 0.75:
+            category = "self_harm" if label == "suicide or self harm" else "harm_others"
+            return True, f"{label} ({score*100:.1f}%)", category
+    return False, None, None
+
 class AnalysisError(Exception):
+
     """Raised on unrecoverable ML pipeline failures."""
 
 
@@ -157,20 +177,20 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         pace_mean     = round(sum(s.get("pace",            0.0) for s in segments) / n, 3)
         jitter_mean   = sum(s.get("raw_jitter",       0)   for s in segments) / n
 
-        if stress_mean >= 85:
-            stress_label = "Dysregulated"
+        comp_mean = 100 - stress_mean
+
+        if comp_mean > 85:
+            stress_label = "Resilient"
             comp_label = "Resilient"
-        elif stress_mean >= 66:
-            stress_label = "Stabilised"
-            comp_label = "Adaptive"
-        elif stress_mean >= 33:
+        elif comp_mean >= 66:
             stress_label = "Adaptive"
+            comp_label = "Adaptive"
+        elif comp_mean >= 33:
+            stress_label = "Stabilised"
             comp_label = "Stabilised"
         else:
-            stress_label = "Resilient"
-            comp_label = "Dysregulated"
-            
-        comp_mean = 100 - stress_mean
+            stress_label = "Dysregulated"
+            comp_label = "Dysregulated" 
 
         sleep_debt_hrs = max(0.0, round((8.0 - sleep_3d_avg) * 3, 2)) if sleep_3d_avg > 0 else None
 
@@ -188,6 +208,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
             "composure_label":       comp_label,
             "sleep_3d_avg":          sleep_3d_avg if sleep_3d_avg > 0 else None,
             "sleep_debt_hrs":        sleep_debt_hrs,
+            "summary":               summary_text,
         }
 
         compute_ms = round((time.perf_counter() - comp_start) * 1000)

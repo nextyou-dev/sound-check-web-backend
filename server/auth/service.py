@@ -4,7 +4,7 @@ auth/service.py — Business logic for OTP generation and JWT issuance.
 Keeps all auth business rules here. The router calls these functions;
 the repository handles all DB I/O.
 """
-import random
+import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
@@ -25,7 +25,7 @@ OTP_TTL_MINS  = 15
 # ─── OTP helpers ────────────────────────────────────────────────────────────
 
 def _generate_otp() -> str:
-    return "".join(random.choices(string.digits, k=OTP_LENGTH))
+    return "".join(secrets.choice(string.digits) for _ in range(OTP_LENGTH))
 
 
 def _hash_otp(otp: str) -> str:

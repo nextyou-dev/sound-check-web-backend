@@ -15,6 +15,7 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     AutoModelForAudioClassification,
     Wav2Vec2Config,
+    pipeline,
 )
 
 from config import log, MODELS_DIR
@@ -37,6 +38,8 @@ class ModelEngine:
         self.va_model: Optional[AutoModelForAudioClassification] = None
         self.silero_vad_model = None
         self.silero_vad_get_timestamps = None
+        self.distilbart_pipeline = None
+        self.summarizer_pipeline = None
         
         ModelEngine._instance = self
 
@@ -133,5 +136,27 @@ class ModelEngine:
 
         self.va_model.load_state_dict(state_dict, strict=False)
         self.va_model.to(self.device).eval()
+
+        log.info("[startup] Loading DistilBART Zero-Shot Safety Classifier...")
+        db_path = os.path.join(MODELS_DIR, "distilbart-mnli")
+        if os.path.exists(db_path):
+            self.distilbart_pipeline = pipeline(
+                "zero-shot-classification", 
+                model=db_path, 
+                device=0 if self.device.type == "cuda" else -1
+            )
+        else:
+            log.warning(f"[startup] DistilBART not found at {db_path} - skipping safety filter")
+
+        log.info("[startup] Loading Flan-T5 Summarizer...")
+        t5_path = os.path.join(MODELS_DIR, "flan-t5-large")
+        if os.path.exists(t5_path):
+            self.summarizer_pipeline = pipeline(
+                "text2text-generation",
+                model=t5_path,
+                device=0 if self.device.type == "cuda" else -1
+            )
+        else:
+            log.warning(f"[startup] FLAN-T5 not found at {t5_path} - skipping summarizer")
 
         log.info(f"[startup] All models ready ✓ (device: {self.device})")

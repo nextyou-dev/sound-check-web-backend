@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 
-from config import MAX_TRIES, RATE_LIMIT_WINDOW_H, log
+from config import MAX_TRIES, RATE_LIMIT_WINDOW_H, EXEMPT_EMAILS, EXEMPT_DOMAINS, log
 from rate_limit.repository import get_count, get_quota_doc, increment
 
 
@@ -23,6 +23,18 @@ def _ip_key(ip: str) -> str:
     return f"ip:{ip}"
 
 
+def _is_exempt(email: str) -> bool:
+    email_lower = email.lower()
+    if email_lower in EXEMPT_EMAILS:
+        return True
+    
+    parts = email_lower.split("@")
+    if len(parts) == 2 and parts[1] in EXEMPT_DOMAINS:
+        return True
+        
+    return False
+
+
 def enforce(email: str, ip: str) -> None:
     """
     Check the email key against MAX_TRIES.
@@ -31,6 +43,10 @@ def enforce(email: str, ip: str) -> None:
     IP rate limiting is commented out but can be re-enabled by
     uncommenting the _ip_key check below.
     """
+    if _is_exempt(email):
+        log.info(f"[rate_limit] Bypassing rate limit for exempt email: {email}")
+        return
+
     # Commented out IP rate limiting as requested by user
     # for key, label in ((_email_key(email), "email"), (_ip_key(ip), "IP")):
     for key, label in ((_email_key(email), "email"),):
@@ -52,6 +68,9 @@ def record_usage(email: str, ip: str) -> None:
     Increment the email counter after a successful analysis.
     Should be called as a fire-and-forget background task.
     """
+    if _is_exempt(email):
+        return
+        
     increment(_email_key(email))
     # increment(_ip_key(ip))  # Commented out IP rate limiting
     log.info(f"[rate_limit] Usage recorded — email={email} (IP tracking disabled)")
@@ -66,6 +85,15 @@ def get_quota(email: str) -> dict:
       max:             int   — MAX_TRIES
       hours_remaining: float — hours until the window resets (0.0 if no usage yet)
     """
+    if _is_exempt(email):
+        return {
+            "max":             9999,
+            "used":            0,
+            "remaining":       9999,
+            "window_hours":    RATE_LIMIT_WINDOW_H,
+            "hours_remaining": 0.0,
+        }
+
     doc = get_quota_doc(_email_key(email))
 
     if doc is None:

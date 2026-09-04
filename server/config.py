@@ -34,6 +34,14 @@ RATE_LIMIT_WINDOW_H: int = int(os.getenv("RATE_LIMIT_WINDOW_H", "48"))
 # analyses a user can run per 48-hour window. Defaults to RATE_LIMIT_MAX.
 MAX_TRIES: int = RATE_LIMIT_MAX
 
+# EXEMPT_EMAILS — comma-separated list of emails that bypass rate limits
+_exempt_raw = os.getenv("EXEMPT_EMAILS", "")
+EXEMPT_EMAILS = set(e.strip().lower() for e in _exempt_raw.split(",") if e.strip())
+
+# EXEMPT_DOMAINS — comma-separated list of email domains (e.g., nextyou.app) that bypass rate limits
+_exempt_domains_raw = os.getenv("EXEMPT_DOMAINS", "")
+EXEMPT_DOMAINS = set(d.strip().lower() for d in _exempt_domains_raw.split(",") if d.strip())
+
 # ─── ML / VAD ────────────────────────────────────────────────────────────────
 GUEST_VAD_THRESHOLD: float = float(os.getenv("GUEST_VAD_THRESHOLD", "0.50"))
 
