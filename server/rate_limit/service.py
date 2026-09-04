@@ -26,7 +26,9 @@ def enforce(email: str, ip: str) -> None:
     Check both keys against RATE_LIMIT_MAX.
     Raises HTTP 429 if either limit is exceeded.
     """
-    for key, label in ((_email_key(email), "email"), (_ip_key(ip), "IP")):
+    # Commented out IP rate limiting as requested by user
+    # for key, label in ((_email_key(email), "email"), (_ip_key(ip), "IP")):
+    for key, label in ((_email_key(email), "email"),):
         count = get_count(key)
         if count >= RATE_LIMIT_MAX:
             log.warning(f"[rate_limit] {label} limit hit for {key} (count={count})")
@@ -45,5 +47,5 @@ def record_usage(email: str, ip: str) -> None:
     Should be called as a fire-and-forget background task.
     """
     increment(_email_key(email))
-    increment(_ip_key(ip))
-    log.info(f"[rate_limit] Usage recorded — email={email}, ip={ip}")
+    # increment(_ip_key(ip))  # Commented out IP rate limiting
+    log.info(f"[rate_limit] Usage recorded — email={email}, ip={ip} (IP tracking disabled)")
