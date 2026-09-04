@@ -46,8 +46,9 @@ def _ensure_indexes() -> None:
     # users: unique email lookup
     db["users"].create_index("email", unique=True)
 
-    # analysis_events: lookup by user
+    # analysis_events: lookup by user and by session_id (engagement tracking)
     db["analysis_events"].create_index("user_id")
+    db["analysis_events"].create_index("session_id", unique=True, sparse=True)
 
     # rate_limits: key lookup + TTL auto-expiry after 48 h
     db["rate_limits"].create_index("key", unique=True)

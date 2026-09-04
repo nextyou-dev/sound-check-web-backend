@@ -1,18 +1,31 @@
-# Sound Check Web — API Documentation
+# Sound Check API — Documentation
 
-This document describes all exposed endpoints, authentication flows, rate limiting rules, and error schemas.
+**Base URL:** `https://sound-check-api.nextyou.app`  
+**Protocol:** HTTPS only  
+**Content-Type:** `application/json` for all JSON endpoints; `multipart/form-data` for file upload  
+**Auth:** Bearer JWT in the `Authorization` header for all protected routes
 
-## Base URL
-All routes are exposed on the FastAPI server root (default `http://localhost:8001`).
+---
+
+## General Error Schema
+
+All non-2xx responses return a JSON body with a `detail` field:
+
+```json
+{ "detail": "ERROR_CODE|Human-readable message" }
+```
+
+The frontend should split on `|`. The left part is a machine-readable error code; the right part is safe to display to the user. If no `|` is present, treat the entire string as the message.
 
 ---
 
 ## 1. Authentication
 
-The authentication flow is completely passwordless and relies on Resend email OTPs.
+### `POST /auth/send-otp`
 
-### `POST /auth/request-otp`
-Sends a 6-digit OTP to the user's email address.
+Sends a 6-digit OTP to the provided email address via Resend. Creates the user account if it doesn't exist yet.
+
+**Auth required:** No
 
 **Request Body:**
 ```json
@@ -22,155 +35,254 @@ Sends a 6-digit OTP to the user's email address.
 ```
 
 **Responses:**
-- `200 OK`
-  ```json
-  {
-    "message": "OTP sent successfully."
-  }
-  ```
-- `422 Unprocessable Entity`: Invalid email format.
-- `500 Internal Server Error`: `MAILER_ERROR|...` if Resend fails.
+
+| Status | Body | Description |
+|--------|------|-------------|
+| `200` | `{ "success": true, "message": "OTP sent to your email." }` | OTP dispatched successfully |
+| `422` | FastAPI validation error | Invalid email format |
+| `500` | `{ "detail": "MAILER_ERROR\|..." }` | Resend failed to deliver the email |
+
+---
 
 ### `POST /auth/verify-otp`
-Validates the OTP and returns a signed JWT.
+
+Validates the submitted OTP against the stored bcrypt hash. On success, returns a signed JWT valid for `JWT_EXPIRES_DAYS` days.
+
+**Auth required:** No
 
 **Request Body:**
 ```json
 {
   "email": "user@example.com",
-  "otp": "123456"
+  "otp": "874254"
 }
 ```
 
 **Responses:**
-- `200 OK`
-  ```json
-  {
-    "access_token": "eyJhbG...",
-    "token_type": "bearer"
-  }
-  ```
-- `401 Unauthorized`:
-  ```json
-  {
-    "detail": "OTP has expired. Please request a new one."
-  }
-  ```
-  *(Other messages include "Incorrect OTP." or "No OTP pending...")*
+
+| Status | Body | Description |
+|--------|------|-------------|
+| `200` | `{ "access_token": "eyJhbG...", "token_type": "bearer" }` | OTP verified; JWT issued |
+| `401` | `{ "detail": "OTP has expired. Please request a new one." }` | OTP TTL elapsed |
+| `401` | `{ "detail": "Incorrect OTP." }` | Wrong code |
+| `401` | `{ "detail": "No OTP pending for this email. Please request one." }` | No pending OTP |
+| `422` | FastAPI validation error | Missing or malformed fields |
+| `500` | `{ "detail": "AUTH_ERROR\|..." }` | Unexpected server error |
 
 ---
 
 ## 2. Voice Analysis
 
-These endpoints require a valid JWT passed in the `Authorization: Bearer <token>` header.
-
-### Rate Limiting Policy
-Users are limited to **3 analyses per 48 hours**. This limit is tracked using a combination of the user's `email` and their `IP address` to prevent abuse.
-
 ### `POST /analysis/voice`
-Analyzes a short voice recording (minimum 10 seconds).
 
-**Headers:**
-- `Authorization`: `Bearer <jwt_token>`
+Analyzes a voice recording and returns a full stress/composure breakdown. Heavy ML inference is performed on the server (expect 15–60 s on CPU). DB logging and rate-limit counter increments happen in the background **after** the response is returned.
 
-**Form Data (multipart/form-data):**
-- `file`: The audio file (WAV, MP3, M4A, etc.)
-- `sleep_3d_avg` (optional, float): The user's average sleep hours over the last 3 days. Defaults to `0.0`.
+**Auth required:** Yes (`Authorization: Bearer <token>`)
 
-**Responses:**
-- `200 OK`
-  ```json
-  {
-    "overall": {
+**Request:** `multipart/form-data`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `audio_file` | File | ✅ | Voice recording. Accepts WAV, MP3, M4A, OGG, FLAC, or any ffmpeg-supported format |
+| `session_id` | string | ✅ | Frontend-generated unique identifier for this session (used later for engagement tracking) |
+| `sleep_3d_avg` | float | ❌ | User's average sleep hours over the last 3 days. Defaults to `0.0`. Pass `0` to omit |
+
+**Success Response `200`:**
+```json
+{
+  "overall": {
+    "stress_score": 45,
+    "composure_score": 55,
+    "stress_label": "Adaptive",
+    "composure_label": "Stabilised",
+    "pitch": "Medium",
+    "pace": 3.2,
+    "jitter": "Low",
+    "raw_jitter_percentage": 0.042,
+    "loudness": "High",
+    "mood": "NEUTRAL",
+    "tone": "NEUTRAL",
+    "sleep_3d_avg": 7.5,
+    "sleep_debt_hrs": 1.5
+  },
+  "segments": [
+    {
+      "start_time": 0.0,
+      "end_time": 30.0,
       "stress_score": 45,
       "composure_score": 55,
-      "pitch": "Medium",
-      "pace": 3.2,
-      "jitter": "Low",
-      "raw_jitter_percentage": 0.05,
-      "loudness": "High",
       "mood": "NEUTRAL",
       "tone": "NEUTRAL",
-      "stress_label": "Adaptive",
-      "composure_label": "Stabilised",
-      "sleep_3d_avg": 7.5,
-      "sleep_debt_hrs": 1.5
-    },
-    "segments": [ ... ],
-    "speech_ratio": 0.85,
-    "audio_duration_sec": 30.5,
-    "ml_version": "v3.1.0_oop",
-    "event_id": "64f9b8c7e4b0a1a2b3c4d5e6"
-  }
-  ```
-- `429 Too Many Requests`: (Rate Limit Exceeded)
-  ```json
-  {
-    "detail": "RATE_LIMIT_EXCEEDED|You have reached the maximum of 3 analyses per 48 hours."
-  }
-  ```
-- `400 Bad Request`: (Validation / Processing Errors)
-  ```json
-  {
-    "detail": "INSUFFICIENT_SPEECH|Only 12% of the recording contained voice. Please ensure you are speaking clearly and try again."
-  }
-  ```
-  *(Other messages: "NO_SEGMENTS|Audio too short to analyse. Please record at least 10 seconds.", "PROCESSING_ERROR|...")*
-- `401 Unauthorized`: Invalid, expired, or missing JWT.
+      "pace": 3.2,
+      "pitch": "Medium",
+      "jitter": "Low",
+      "loudness": "High"
+    }
+  ],
+  "speech_ratio": 0.85,
+  "audio_duration_sec": 30.5,
+  "ml_version": "v3.1.0_oop"
+}
+```
+
+**Stress / Composure Label Logic:**
+
+| Stress Score | Stress Label | Composure Score | Composure Label |
+|---|---|---|---|
+| 85 – 100 | Dysregulated | `100 - stress_score` | Resilient |
+| 66 – 84 | Stabilised | `100 - stress_score` | Adaptive |
+| 33 – 65 | Adaptive | `100 - stress_score` | Stabilised |
+| 0 – 32 | Resilient | `100 - stress_score` | Dysregulated |
+
+**Error Responses:**
+
+| Status | `detail` | Cause |
+|--------|----------|-------|
+| `401` | `"Not authenticated"` | Missing or invalid JWT |
+| `422` | `"INSUFFICIENT_SPEECH\|Only X% of the recording contained voice..."` | VAD found < 50% speech content |
+| `422` | `"NO_SEGMENTS\|Audio too short to analyse..."` | Recording shorter than ~10 s of usable speech |
+| `429` | `"RATE_LIMIT_EXCEEDED\|You have reached the limit of N analyses per 48 hours..."` | Per-account quota hit |
+| `400` | `"INVALID_FILE\|Could not read the uploaded audio file."` | Corrupt or unreadable upload |
+| `500` | `"PROCESSING_ERROR\|..."` | Unexpected ML pipeline failure |
+
+---
+
+### `GET /analysis/quota`
+
+Returns the authenticated user's remaining analysis quota for the current 48-hour window.
+
+**Auth required:** Yes (`Authorization: Bearer <token>`)
+
+**Request Body:** None
+
+**Success Response `200`:**
+```json
+{
+  "remaining": 2,
+  "max": 3,
+  "hours_remaining": 31.5
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `remaining` | int | How many analyses the user can still run in this window |
+| `max` | int | The maximum allowed per window (controlled by `RATE_LIMIT_MAX` env var) |
+| `hours_remaining` | float | Hours until the rate-limit resets. `0.0` if the user has never used the service |
+
+**Error Responses:**
+
+| Status | `detail` | Cause |
+|--------|----------|-------|
+| `401` | `"Not authenticated"` | Missing or invalid JWT |
 
 ---
 
 ## 3. Engagement Tracking
 
-These endpoints track when a user interacts with their analysis results. They are idempotent.
-
-### `PATCH /analysis/{event_id}/viewed`
-Marks the analysis result as viewed by the user.
-
-**Headers:**
-- `Authorization`: `Bearer <jwt_token>`
-
-**Responses:**
-- `200 OK`
-  ```json
-  {
-    "status": "success",
-    "message": "View recorded"
-  }
-  ```
-- `404 Not Found`:
-  ```json
-  {
-    "detail": "Analysis event not found or does not belong to you."
-  }
-  ```
-
-### `PATCH /analysis/{event_id}/downloaded`
-Marks the analysis result as downloaded/saved by the user.
-
-**Headers:**
-- `Authorization`: `Bearer <jwt_token>`
-
-**Responses:**
-- `200 OK`
-  ```json
-  {
-    "status": "success",
-    "message": "Download recorded"
-  }
-  ```
-- `404 Not Found`: Same as above.
+Both endpoints are **idempotent** — calling them multiple times has no side effect after the first call. They look up the analysis event by `session_id` and verify it belongs to the authenticated user.
 
 ---
 
-## General Error Response Schema
+### `PATCH /analysis/viewed`
 
-Whenever a non-200 error occurs, the API will respond with a JSON object following this schema:
+Marks the analysis result as viewed by the user.
 
+**Auth required:** Yes (`Authorization: Bearer <token>`)
+
+**Request Body:**
 ```json
 {
-  "detail": "<ERROR_CODE>|<Human readable description>"
+  "session_id": "frontend-generated-session-uuid"
 }
 ```
 
-The frontend should split the `detail` string by the `|` character. The first part is an enum-like error code, and the second part is a human-readable message safe to display directly to the user. If no `|` is present, treat the entire string as the human-readable message.
+**Success Response `200`:**
+```json
+{
+  "success": true,
+  "has_viewed_result": true
+}
+```
+
+**Error Responses:**
+
+| Status | `detail` | Cause |
+|--------|----------|-------|
+| `401` | `"Not authenticated"` | Missing or invalid JWT |
+| `404` | `"Session not found or does not belong to you."` | Invalid `session_id` or belongs to a different user |
+
+---
+
+### `PATCH /analysis/downloaded`
+
+Marks the analysis result as downloaded by the user.
+
+**Auth required:** Yes (`Authorization: Bearer <token>`)
+
+**Request Body:**
+```json
+{
+  "session_id": "frontend-generated-session-uuid"
+}
+```
+
+**Success Response `200`:**
+```json
+{
+  "success": true,
+  "has_clicked_download": true
+}
+```
+
+**Error Responses:**
+
+| Status | `detail` | Cause |
+|--------|----------|-------|
+| `401` | `"Not authenticated"` | Missing or invalid JWT |
+| `404` | `"Session not found or does not belong to you."` | Invalid `session_id` or belongs to a different user |
+
+---
+
+## 4. Rate Limiting
+
+| Dimension | Limit | Window |
+|-----------|-------|--------|
+| Per account (email) | `RATE_LIMIT_MAX` (env var, default `3`) | 48 hours rolling |
+
+- The counter is incremented **after** a successful analysis only.
+- Failed requests (bad audio, processing errors, etc.) do **not** count against the quota.
+- The window resets automatically via a MongoDB TTL index — no cron job required.
+- Use `GET /analysis/quota` before submitting audio to check remaining uses.
+
+**Rate limit exceeded response `429`:**
+```json
+{
+  "detail": "RATE_LIMIT_EXCEEDED|You have reached the limit of 3 voice analyses per 48 hours. Please try again later."
+}
+```
+
+---
+
+## 5. Authentication Flow (End-to-End)
+
+```
+1. POST /auth/send-otp    { email }          → OTP sent to inbox
+2. POST /auth/verify-otp  { email, otp }     → { access_token, token_type }
+3. Store token on client (localStorage / secure cookie)
+4. Pass token on every protected request:
+   Authorization: Bearer <access_token>
+```
+
+---
+
+## 6. Frontend Integration Notes
+
+- **`session_id`**: Generate this on the frontend when the user starts a recording session (e.g. `crypto.randomUUID()`). Store it locally so you can call `/analysis/viewed` and `/analysis/downloaded` later using the same ID.
+- **Polling quota**: Call `GET /analysis/quota` on app load to decide whether to show/hide the record button.
+- **Error handling**: Always split `detail` on `|`. Example:
+  ```js
+  const [code, message] = detail.includes('|')
+    ? detail.split('|')
+    : ['ERROR', detail];
+  ```
