@@ -31,7 +31,7 @@ worker_class       = "uvicorn.workers.UvicornWorker"
 workers            = int(os.getenv("WEB_CONCURRENCY", "2"))
 threads            = 1           # 1 thread per worker; async handles concurrency
 worker_connections = 1000        # max simultaneous keep-alive connections per worker
-timeout            = 300         # kill worker if it's silent for 5 min (ML is slow)
+timeout            = 900         # kill worker if it's silent for 5 min (ML is slow)
 graceful_timeout   = 30          # wait 30s for in-flight requests on SIGTERM
 keepalive          = 5           # seconds to keep idle connections alive
 

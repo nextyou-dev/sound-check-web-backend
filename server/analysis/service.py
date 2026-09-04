@@ -64,6 +64,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
 
     tmp_upload = tmp_rnnoise = tmp_wav = None
     try:
+        log.info(f"[analysis] Step 1: Writing upload to disk ({filename})")
         # 1. Write upload to disk
         ext = os.path.splitext(filename)[-1] or ".wav"
         fd, tmp_upload = tempfile.mkstemp(suffix=ext)
@@ -71,9 +72,11 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         with open(tmp_upload, "wb") as f:
             f.write(audio_bytes)
 
+        log.info("[analysis] Step 2: Running RNNoise denoising")
         # 2. RNNoise denoising
         tmp_rnnoise = preprocessor.process(tmp_upload)
 
+        log.info("[analysis] Step 3: Downsampling to 16kHz mono via ffmpeg")
         # 3. Downsample to 16kHz mono
         fd, tmp_wav = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
@@ -85,12 +88,14 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         if res.returncode != 0:
             raise AnalysisError(f"FFmpeg failed: {res.stderr.decode('utf-8', errors='ignore')}")
 
+        log.info("[analysis] Step 4: Loading audio into memory")
         # 4. Load audio
         wf, sr = sf.read(tmp_wav)
         if len(wf.shape) > 1:
             wf = wf.mean(axis=1)
         audio_duration_sec = len(wf) / sr
         
+        log.info("[analysis] Step 5: Running VAD gate")
         # 5. VAD gate (energy fallback only for simplicity in guest if Silero fails)
         speech_ratio = _speech_ratio_vad(wf, sr, engine)
         log.info(f"[analysis] VAD speech_ratio={speech_ratio:.1%} threshold={GUEST_VAD_THRESHOLD:.1%}")
@@ -100,6 +105,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
                 "Please ensure you are speaking clearly and try again."
             )
 
+        log.info("[analysis] Step 6: Starting chunked ML processing")
         # 6. Chunked processing (30-second windows)
         chunk_length = 30 * sr
         segments     = []
@@ -143,6 +149,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         if not segments:
             raise AnalysisError("NO_SEGMENTS|Audio too short to analyse. Please record at least 10 seconds.")
 
+        log.info("[analysis] Step 7: Aggregating chunk metrics into overall scores")
         # 7. Aggregate overall
         n             = len(segments)
         stress_mean   = int(round(sum(s.get("stress_score",   50) for s in segments) / n))
