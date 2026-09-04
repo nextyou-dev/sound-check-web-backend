@@ -158,17 +158,21 @@ Returns the authenticated user's remaining analysis quota for the current 48-hou
 **Success Response `200`:**
 ```json
 {
-  "remaining": 2,
   "max": 3,
-  "hours_remaining": 31.5
+  "used": 1,
+  "remaining": 2,
+  "window_hours": 48,
+  "hours_remaining": 46.0
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `remaining` | int | How many analyses the user can still run in this window |
-| `max` | int | The maximum allowed per window (controlled by `RATE_LIMIT_MAX` env var) |
-| `hours_remaining` | float | Hours until the rate-limit resets. `0.0` if the user has never used the service |
+| `max` | int | Maximum analyses allowed per window (set via `RATE_LIMIT_MAX` env var) |
+| `used` | int | How many analyses the user has run in the current window |
+| `remaining` | int | How many analyses the user can still run (`max - used`) |
+| `window_hours` | int | The rolling window size in hours (set via `RATE_LIMIT_WINDOW_H`, default `48`) |
+| `hours_remaining` | float | Hours until the rate-limit window resets. `0.0` if no usage yet in this window |
 
 **Error Responses:**
 
