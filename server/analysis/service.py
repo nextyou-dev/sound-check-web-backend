@@ -157,20 +157,20 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         pace_mean     = round(sum(s.get("pace",            0.0) for s in segments) / n, 3)
         jitter_mean   = sum(s.get("raw_jitter",       0)   for s in segments) / n
 
-        if stress_mean >= 85:
-            stress_label = "Dysregulated"
+        comp_mean = 100 - stress_mean
+
+        if comp_mean > 85:
+            stress_label = "Resilient"
             comp_label = "Resilient"
-        elif stress_mean >= 66:
-            stress_label = "Stabilised"
-            comp_label = "Adaptive"
-        elif stress_mean >= 33:
+        elif comp_mean >= 66:
             stress_label = "Adaptive"
+            comp_label = "Adaptive"
+        elif comp_mean >= 33:
+            stress_label = "Stabilised"
             comp_label = "Stabilised"
         else:
-            stress_label = "Resilient"
-            comp_label = "Dysregulated"
-            
-        comp_mean = 100 - stress_mean
+            stress_label = "Dysregulated"
+            comp_label = "Dysregulated" 
 
         sleep_debt_hrs = max(0.0, round((8.0 - sleep_3d_avg) * 3, 2)) if sleep_3d_avg > 0 else None
 

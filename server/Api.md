@@ -127,12 +127,14 @@ Analyzes a voice recording and returns a full stress/composure breakdown. Heavy 
 
 **Stress / Composure Label Logic:**
 
-| Stress Score | Stress Label | Composure Score | Composure Label |
-|---|---|---|---|
-| 85 – 100 | Dysregulated | `100 - stress_score` | Resilient |
-| 66 – 84 | Stabilised | `100 - stress_score` | Adaptive |
-| 33 – 65 | Adaptive | `100 - stress_score` | Stabilised |
-| 0 – 32 | Resilient | `100 - stress_score` | Dysregulated |
+Labels are determined by the `composure_score` (`100 - stress_score`). Both labels are set to the same value based on the composure score.
+
+| Composure Score | Stress Label | Composure Label |
+|---|---|---|
+| > 85 | Resilient | Resilient |
+| 66 – 85 | Adaptive | Adaptive |
+| 33 – 65 | Stabilised | Stabilised |
+| 0 – 32 | Dysregulated | Dysregulated |
 
 **Error Responses:**
 
