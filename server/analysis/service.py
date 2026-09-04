@@ -131,6 +131,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
                     "pace":                  raw.get("pace", 0.0),
                     "pitch":                 pitch_cat,
                     "jitter":                jitter_cat,
+                    "raw_jitter":            raw.get("jitter", 0),
                     "loudness":              loudness_cat,
                 })
             except FeatureExtractionError:
@@ -147,7 +148,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         stress_mean   = int(round(sum(s.get("stress_score",   50) for s in segments) / n))
         comp_mean     = int(round(sum(s.get("composure_score", 50) for s in segments) / n))
         pace_mean     = round(sum(s.get("pace",            0.0) for s in segments) / n, 3)
-        jitter_mean   = sum(s.get("jitter",           0)   for s in segments) / n
+        jitter_mean   = sum(s.get("raw_jitter",       0)   for s in segments) / n
 
         if stress_mean >= 85:
             stress_label = "Dysregulated"
