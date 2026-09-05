@@ -13,4 +13,4 @@ COPY server/ /app/
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8001
-CMD ["gunicorn", "--preload", "-k", "uvicorn.workers.UvicornWorker", "-w", "6", "--timeout", "300", "-b", "0.0.0.0:8001", "main:app"]
+CMD ["gunicorn", "--preload", "-k", "uvicorn.workers.UvicornWorker", "-w", "8", "--timeout", "300", "-b", "0.0.0.0:8001", "main:app"]
