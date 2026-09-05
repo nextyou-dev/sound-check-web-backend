@@ -179,18 +179,23 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
 
         comp_mean = 100 - stress_mean
 
-        if comp_mean > 85:
+        # Label mapping (both stress_label & composure_label use the same composure score):
+        #   0  – 33  → Dysregulated
+        #   34 – 66  → Stabilised
+        #   67 – 85  → Adaptive
+        #   86 – 100 → Resilient
+        if comp_mean >= 86:
             stress_label = "Resilient"
-            comp_label = "Resilient"
-        elif comp_mean >= 66:
+            comp_label   = "Resilient"
+        elif comp_mean >= 67:
             stress_label = "Adaptive"
-            comp_label = "Adaptive"
-        elif comp_mean >= 33:
+            comp_label   = "Adaptive"
+        elif comp_mean >= 34:
             stress_label = "Stabilised"
-            comp_label = "Stabilised"
+            comp_label   = "Stabilised"
         else:
             stress_label = "Dysregulated"
-            comp_label = "Dysregulated" 
+            comp_label   = "Dysregulated"
 
         sleep_debt_hrs = max(0.0, round((8.0 - sleep_3d_avg) * 3, 2)) if sleep_3d_avg > 0 else None
 
