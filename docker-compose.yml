@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  sound-check-backend:
+    build: .
+    container_name: sound-check-backend
+    restart: unless-stopped
+    ports:
+      - "8003:8001"
+    env_file:
+      - .env
+    volumes:
+      - /home/nextyou/models:/home/nextyou/models
+    environment:
+      - MODELS_DIR=/home/nextyou/models
