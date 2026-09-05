@@ -16,6 +16,7 @@ jobs:
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
+            set -e
             echo "🚀 Backend Deployment Started..."
             cd /home/nextyou/sound-check-web-backend
             
