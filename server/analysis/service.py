@@ -129,6 +129,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
         # 6. Chunked processing (30-second windows)
         chunk_length = 30 * sr
         segments     = []
+        full_transcript = []
         comp_start   = time.perf_counter()
 
         for i in range(0, len(wf), chunk_length):
@@ -160,6 +161,10 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
                     "raw_jitter":            raw.get("jitter", 0),
                     "loudness":              loudness_cat,
                 })
+                
+                t = raw.get("transcript", "").strip()
+                if t:
+                    full_transcript.append(t)
             except FeatureExtractionError:
                 pass   # skip bad chunk, keep going
             finally:
@@ -197,6 +202,18 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
             stress_label = "Dysregulated"
             comp_label   = "Dysregulated"
 
+        # Generate summary using the NLP pipeline if available
+        summary_text = None
+        merged_transcript = " ".join(full_transcript).strip()
+        if merged_transcript and engine.summarizer_pipeline:
+            try:
+                prompt = f"Summarize the following user's transcript in two sentences: {merged_transcript}"
+                res = engine.summarizer_pipeline(prompt, max_length=60, min_length=5, do_sample=False)
+                if res and len(res) > 0:
+                    summary_text = res[0].get("generated_text", "").strip()
+            except Exception as e:
+                log.error(f"[analysis] Summarizer failed: {e}")
+
         sleep_debt_hrs = max(0.0, round((8.0 - sleep_3d_avg) * 3, 2)) if sleep_3d_avg > 0 else None
 
         overall = {
@@ -213,7 +230,6 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
             "composure_label":       comp_label,
             "sleep_3d_avg":          sleep_3d_avg if sleep_3d_avg > 0 else None,
             "sleep_debt_hrs":        sleep_debt_hrs,
-            "summary":               summary_text,
         }
 
         compute_ms = round((time.perf_counter() - comp_start) * 1000)
@@ -226,6 +242,7 @@ def run_voice_analysis(audio_bytes: bytes, filename: str, sleep_3d_avg: float) -
             "audio_duration_sec": round(audio_duration_sec, 2),
             "sleep_3d_avg":       sleep_3d_avg if sleep_3d_avg > 0 else None,
             "ml_version":         "v3.1.0_oop",
+            "_db_summary":        summary_text,  # Hidden field to pass to router for DB only
         })
 
     except AnalysisError:
