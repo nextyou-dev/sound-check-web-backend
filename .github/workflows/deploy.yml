@@ -15,6 +15,7 @@ jobs:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
+          command_timeout: 30m          # <--- HE MUST ADD THIS LINE
           script: |
             set -e
             echo "🚀 Backend Deployment Started..."
